@@ -61,7 +61,7 @@ void updatePotential(particle3D &i, particle3D &j, particle3D &k) {
 void updateAcceleration(particle1D &particle) {
 	double h = getH(particle);
 	volatile double hh = particle.coord + h - (particle.coord - h);
-	particle.acc = -1 / unitMass * (particle.plusPotential - particle.minusPotential) / hh;
+	particle.acc = -(particle.plusPotential - particle.minusPotential) / hh;
 }
 
 void updateVelocity(particle1D &particle, double oldAcc, bool delta) {
@@ -80,6 +80,12 @@ void updateAccelerationVelocity(particle3D &particle, bool delta) {
 	updateAccelerationVelocity(particle.z, delta);
 }
 
+void updateAcceleration(particle3D &particle) {
+	updateAcceleration(particle.x);
+	updateAcceleration(particle.y);
+	updateAcceleration(particle.z);
+}
+
 void parseCommandLineArgs(int argc, char *argv[], std::string &inFilename, std::string &outFilename, int &steps,
 		double &delta, bool &isVerbose) {
 	if (argc < 5) {
@@ -96,6 +102,7 @@ void parseCommandLineArgs(int argc, char *argv[], std::string &inFilename, std::
 		isVerbose = false;
 }
 
+// TODO maybe propagate particles in chunks here
 std::vector<particle3D> readFile(std::string fileName) {
 	particle3D p;
 	p.x.acc = p.y.acc = p.z.acc = 0;
@@ -109,6 +116,71 @@ std::vector<particle3D> readFile(std::string fileName) {
 	while(std::getline(file, s)) {
 		std::istringstream stream(s);
 		stream >> p.x.coord >> p.y.coord >> p.z.coord >> p.x.v >> p.y.v >> p.z.v;
+		v.emplace_back(p);
+	}
+	return v;
+}
+
+void particlesToArray(std::vector<particle3D> v, int begin, int end, double *arr) {
+	int i = 0;
+	for (; begin < end; begin++) {
+		particle3D p = v[begin];
+		arr[i] = p.number;
+		i++;
+		arr[i] = p.x.coord;
+		arr[i+1] = p.x.v;
+		arr[i+2] = p.x.acc;
+		// TODO arr[i+3] = p.x.potential; i += 4;
+		arr[i+3] = p.x.minusPotential;
+		arr[i+4] = p.x.plusPotential;
+		i += 5;
+		arr[i] = p.y.coord;
+		arr[i+1] = p.y.v;
+		arr[i+2] = p.y.acc;
+		// TODO arr[i+3] = p.y.potential; i += 4;
+		arr[i+3] = p.y.minusPotential;
+		arr[i+4] = p.y.plusPotential;
+		i += 5;
+		arr[i] = p.z.coord;
+		arr[i+1] = p.z.v;
+		arr[i+2] = p.z.acc;
+		// TODO arr[i+3] = p.z.potential; i += 4;
+		arr[i+3] = p.z.minusPotential;
+		arr[i+4] = p.z.plusPotential;
+		i += 5;
+	}
+}
+
+std::vector<particle3D> arrayToParticles(double *arr, int size) {
+	std::vector<particle3D> v;
+	int i = 0;
+	while (i < size) {
+		particle3D p;
+		p.number = arr[i];
+		i++;
+		p.x.coord = arr[i];
+		p.x.v = arr[i+1];
+		p.x.acc = arr[i+2];
+		// TODO p.x.potential = arr[i+3]; i += 4;
+		p.x.minusPotential = arr[i+3];
+		p.x.plusPotential = arr[i+4];
+		i += 5;
+
+		p.y.coord = arr[i];
+		p.y.v = arr[i+1];
+		p.y.acc = arr[i+2];
+		// TODO p.y.potential = arr[i+3]; i += 4;
+		p.y.minusPotential = arr[i+3];
+		p.y.plusPotential = arr[i+4];
+		i += 5;
+
+		p.z.coord = arr[i];
+		p.z.v = arr[i+1];
+		p.z.acc = arr[i+2];
+		// TODO p.z.potential = arr[i+3]; i += 4;
+		p.z.minusPotential = arr[i+3];
+		p.z.plusPotential = arr[i+4];
+		i += 5;
 		v.emplace_back(p);
 	}
 	return v;
