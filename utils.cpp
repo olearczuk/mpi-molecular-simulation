@@ -6,19 +6,28 @@
 #include <cstdio>
 #include "utils.h"
 
-void updateCoords(particle1D &particle, bool delta) {
+void updateCoords(particle1D &particle, double delta) {
 	particle.coord += particle.v * delta + 0.5 * particle.acc * delta * delta;
 }
 
-void updateCoords(particle3D &particle, bool delta) {
+void updateCoords(particle3D &particle, double delta) {
 	updateCoords(particle.x, delta);
 	updateCoords(particle.y, delta);
 	updateCoords(particle.z, delta);
 }
 
+void updateCoords(std::vector<particle3D> &v, double delta) {
+	for (particle3D &p : v) {
+		updateCoords(p, delta);
+	}
+}
+
 double getH(particle1D &particle) {
 	// TODO - should be here abs(particle.coord) or not (shouldn't make a difference here)
-	return abs(particle.coord) < minDistance ? minDistance * auxE : particle.coord * auxE;
+    if (std::abs(particle.coord) >= minDistance)
+        return particle.coord * auxE;
+    else
+        return minDistance * auxE;
 }
 
 double computeNorm(particle3D &particle1, particle3D &particle2) {
@@ -30,9 +39,10 @@ double computeNorm(particle3D &particle1, particle3D &particle2) {
 
 double computePotential(particle3D &i, particle3D &j, particle3D &k) {
 	double Rij = computeNorm(i, j), Rik = computeNorm(i, k), Rkj = computeNorm(k, j);
-	return abs(1 / pow(Rij * Rik * Rkj, 3) + 3 *
+	double potential = std::abs(1 / pow(Rij * Rik * Rkj, 3) + 3. *
 		(-Rij*Rij + Rik*Rik + Rkj*Rkj) * (Rij*Rij - Rik*Rik + Rkj*Rkj) * (Rij*Rij + Rik*Rik - Rkj*Rkj) /
-		8 / pow(Rij * Rik * Rkj, 5));
+		(8. * pow(Rij * Rik * Rkj, 5)));
+	return 2 * potential;
 }
 
 void updatePotential1D(particle1D &i1D, particle3D &i, particle3D &j, particle3D &k) {
@@ -49,6 +59,7 @@ void updatePotential(particle3D &i, particle3D &j, particle3D &k) {
 	updatePotential1D(i.y, i, j, k);
 	updatePotential1D(i.z, i, j, k);
 
+
 	updatePotential1D(j.x, j, i, k);
 	updatePotential1D(j.y, j, i, k);
 	updatePotential1D(j.z, j, i, k);
@@ -58,32 +69,57 @@ void updatePotential(particle3D &i, particle3D &j, particle3D &k) {
 	updatePotential1D(k.z, k, j, i);
 }
 
+void updatePotential(std::vector<particle3D> &v1, std::vector<particle3D> &v2, std::vector<particle3D> &v3) {
+	for (auto & i : v1) {
+		for (auto & j : v2) {
+			if (i.number == j.number)
+				continue;
+			for (auto & k : v3)
+				// TODO v3[k].number > v2[j].number (2 * in computePotential)
+				if (i.number != k.number && j.number != k.number) {
+//					printf("%f %f %f\n", v1[0].number, v2[0].number, v3[0].number);
+					updatePotential(i, j, k);
+				}
+		}
+	}
+}
 void updateAcceleration(particle1D &particle) {
-	double h = getH(particle);
-	volatile double hh = particle.coord + h - (particle.coord - h);
-	particle.acc = -(particle.plusPotential - particle.minusPotential) / hh;
+    double h = getH(particle);
+    volatile double hh = particle.coord + h - (particle.coord - h);
+    particle.acc = -1 / unitMass * (particle.plusPotential - particle.minusPotential) / hh;
 }
 
-void updateVelocity(particle1D &particle, double oldAcc, bool delta) {
+void updateVelocity(particle1D &particle, double oldAcc, double delta) {
 	particle.v += 0.5 * (oldAcc + particle.acc) * delta;
 }
 
-void updateAccelerationVelocity(particle1D &particle, bool delta) {
+void updateAccelerationVelocity(particle1D &particle, double delta) {
 	double oldAcc = particle.acc;
 	updateAcceleration(particle);
 	updateVelocity(particle, oldAcc, delta);
 }
 
-void updateAccelerationVelocity(particle3D &particle, bool delta) {
+void updateAccelerationVelocity(particle3D &particle, double delta) {
 	updateAccelerationVelocity(particle.x, delta);
 	updateAccelerationVelocity(particle.y, delta);
 	updateAccelerationVelocity(particle.z, delta);
 }
 
+void updateAccelerationVelocity(std::vector<particle3D> &v, double delta) {
+	for (particle3D &p : v)
+		updateAccelerationVelocity(p, delta);
+}
+
+
 void updateAcceleration(particle3D &particle) {
 	updateAcceleration(particle.x);
 	updateAcceleration(particle.y);
 	updateAcceleration(particle.z);
+}
+
+void updateAcceleration(std::vector<particle3D> &v) {
+	for (particle3D &p : v)
+		updateAcceleration(p);
 }
 
 void parseCommandLineArgs(int argc, char *argv[], std::string &inFilename, std::string &outFilename, int &steps,
@@ -96,26 +132,25 @@ void parseCommandLineArgs(int argc, char *argv[], std::string &inFilename, std::
 	outFilename = argv[2];
 	steps = atoi(argv[3]);
 	delta = atof(argv[4]);
-	if (argc == 6 && strcmp(argv[5], "-v") == 0)
-		isVerbose = true;
-	else
-		isVerbose = false;
+    isVerbose = argc == 6 && strcmp(argv[5], "-v") == 0;
 }
 
 // TODO maybe propagate particles in chunks here
-std::vector<particle3D> readFile(std::string fileName) {
-	particle3D p;
+std::vector<particle3D> readFile(const std::string& fileName) {
+	particle3D p{};
 	p.x.acc = p.y.acc = p.z.acc = 0;
 	p.x.plusPotential = p.y.plusPotential = p.z.plusPotential = 0;
 	p.x.minusPotential = p.y.minusPotential = p.z.minusPotential = 0;
 	std::vector<particle3D> v;
 	std::fstream file;
 	file.open(fileName);
-	int V, E;
 	std::string s;
+	int number = 0;
 	while(std::getline(file, s)) {
 		std::istringstream stream(s);
 		stream >> p.x.coord >> p.y.coord >> p.z.coord >> p.x.v >> p.y.v >> p.z.v;
+		p.number = number;
+		number++;
 		v.emplace_back(p);
 	}
 	return v;
@@ -151,11 +186,11 @@ void particlesToArray(std::vector<particle3D> v, int begin, int end, double *arr
 	}
 }
 
-std::vector<particle3D> arrayToParticles(double *arr, int size) {
+std::vector<particle3D> arrayToParticles(const double *arr, int size) {
 	std::vector<particle3D> v;
 	int i = 0;
 	while (i < size) {
-		particle3D p;
+		particle3D p{};
 		p.number = arr[i];
 		i++;
 		p.x.coord = arr[i];
@@ -184,4 +219,22 @@ std::vector<particle3D> arrayToParticles(double *arr, int size) {
 		v.emplace_back(p);
 	}
 	return v;
+}
+
+// TODO remove
+void printParticle(particle3D p) {
+//    printf("%f: %f %f %f %f %f | %f %f %f %f %f | %f %f %f %f %f\n", p.number,
+//            p.x.coord, p.x.v, p.x.acc, p.x.minusPotential, p.x.plusPotential,
+//           p.y.coord, p.y.v, p.x.acc, p.y.minusPotential, p.y.plusPotential,
+//           p.z.coord, p.z.v, p.z.acc, p.z.minusPotential, p.z.plusPotential);
+
+//    printf("%.0f: %.15f %.15f %.15f\n", p.number, p.x.acc, p.y.acc, p.z.acc);
+
+    printf("%.0f: %.15f %.15f %.15f %.15f %.15f %.15f\n", p.number, p.x.coord, p.y.coord, p.z.coord,
+            p.x.v, p.y.v, p.z.v);
+
+//    printf("%f: %f %f %f | %.15f %.15f %.15f | %.15f %.15f %.15f\n", p.number,
+//           p.x.coord, p.y.coord, p.z.coord,
+//           p.x.minusPotential, p.y.minusPotential, p.z.minusPotential,
+//           p.x.plusPotential, p.y.plusPotential, p.z.plusPotential);
 }
