@@ -26,7 +26,8 @@ void parseCommandLineArgs(int argc, char *argv[], std::string &inFilename, std::
 std::vector<particle3D> readFile(const std::string& fileName);
 
 void updateCoords(std::vector<particle3D> &v, double delta);
-void updatePotential(std::vector<particle3D> &v1, std::vector<particle3D> &v2, std::vector<particle3D> &v3);
+void updatePotential(std::vector<particle3D> &v1, std::vector<particle3D> &v2, std::vector<particle3D> &v3,
+        int owner1, int owner2, int owner3);
 void updateAccelerationVelocity(std::vector<particle3D> &v, double delta);
 void updateAcceleration(std::vector<particle3D> &v);
 

@@ -10,15 +10,11 @@ void updateCoords(particle1D &particle, double delta) {
 	particle.coord += particle.v * delta + 0.5 * particle.acc * delta * delta;
 }
 
-void updateCoords(particle3D &particle, double delta) {
-	updateCoords(particle.x, delta);
-	updateCoords(particle.y, delta);
-	updateCoords(particle.z, delta);
-}
-
 void updateCoords(std::vector<particle3D> &v, double delta) {
 	for (particle3D &p : v) {
-		updateCoords(p, delta);
+		updateCoords(p.x, delta);
+        updateCoords(p.y, delta);
+        updateCoords(p.z, delta);
 	}
 }
 
@@ -39,46 +35,42 @@ double computeNorm(particle3D &particle1, particle3D &particle2) {
 
 double computePotential(particle3D &i, particle3D &j, particle3D &k) {
 	double Rij = computeNorm(i, j), Rik = computeNorm(i, k), Rkj = computeNorm(k, j);
-	double potential = std::abs(1 / pow(Rij * Rik * Rkj, 3) + 3. *
+	double potential = 1 / pow(Rij * Rik * Rkj, 3) + 3. *
 		(-Rij*Rij + Rik*Rik + Rkj*Rkj) * (Rij*Rij - Rik*Rik + Rkj*Rkj) * (Rij*Rij + Rik*Rik - Rkj*Rkj) /
-		(8. * pow(Rij * Rik * Rkj, 5)));
-	return 2 * potential;
+		(8. * pow(Rij * Rik * Rkj, 5));
+	return potential;
 }
 
 void updatePotential1D(particle1D &i1D, particle3D &i, particle3D &j, particle3D &k) {
 	double h = getH(i1D);
 	i1D.coord += h;
-	i1D.potential += computePotential(i, j, k);
+	double potentialPlus = computePotential(i, j, k);
 	i1D.coord -= 2 * h;
-	i1D.potential -= computePotential(i, j, k);
+	double potentialMinus = computePotential(i, j, k);
+	i1D.potential += potentialPlus - potentialMinus;
 	i1D.coord += h;
 }
 
-void updatePotential(particle3D &i, particle3D &j, particle3D &k) {
-	updatePotential1D(i.x, i, j, k);
-	updatePotential1D(i.y, i, j, k);
-	updatePotential1D(i.z, i, j, k);
-
-
-	updatePotential1D(j.x, j, i, k);
-	updatePotential1D(j.y, j, i, k);
-	updatePotential1D(j.z, j, i, k);
-
-	updatePotential1D(k.x, k, j, i);
-	updatePotential1D(k.y, k, j, i);
-	updatePotential1D(k.z, k, j, i);
-}
-
-void updatePotential(std::vector<particle3D> &v1, std::vector<particle3D> &v2, std::vector<particle3D> &v3) {
+void updatePotential(std::vector<particle3D> &v1, std::vector<particle3D> &v2, std::vector<particle3D> &v3,
+        int owner1, int owner2, int owner3) {
 	for (auto & i : v1) {
 		for (auto & j : v2) {
-			if (i.number == j.number)
-				continue;
 			for (auto & k : v3)
-				// TODO v3[k].number > v2[j].number (2 * in computePotential)
-				if (i.number != k.number && j.number != k.number) {
-//					printf("%f %f %f\n", v1[0].number, v2[0].number, v3[0].number);
-					updatePotential(i, j, k);
+			    if ((owner1 != owner2 && owner1 != owner3 && owner2 != owner3) ||
+			        (owner1 == owner2 && i.number < j.number && k.number != i.number && k.number != j.number) ||
+			        (owner1 == owner3 && i.number < k.number && j.number != i.number && j.number != k.number) ||
+			        (owner2 == owner3 && j.number < k.number && i.number != j.number && i.number != k.number)) {
+                    updatePotential1D(i.x, i, j, k);
+                    updatePotential1D(i.y, i, j, k);
+                    updatePotential1D(i.z, i, j, k);
+
+                    updatePotential1D(j.x, j, i, k);
+                    updatePotential1D(j.y, j, i, k);
+                    updatePotential1D(j.z, j, i, k);
+
+                    updatePotential1D(k.x, k, j, i);
+                    updatePotential1D(k.y, k, j, i);
+                    updatePotential1D(k.z, k, j, i);
 				}
 		}
 	}
@@ -86,7 +78,7 @@ void updatePotential(std::vector<particle3D> &v1, std::vector<particle3D> &v2, s
 void updateAcceleration(particle1D &particle) {
     double h = getH(particle);
     volatile double hh = particle.coord + h - (particle.coord - h);
-    particle.acc = -1 / unitMass * particle.potential / hh;
+    particle.acc = 2 * -1 / unitMass * particle.potential / hh;
 }
 
 void updateVelocity(particle1D &particle, double oldAcc, double delta) {
@@ -99,27 +91,20 @@ void updateAccelerationVelocity(particle1D &particle, double delta) {
 	updateVelocity(particle, oldAcc, delta);
 }
 
-void updateAccelerationVelocity(particle3D &particle, double delta) {
-	updateAccelerationVelocity(particle.x, delta);
-	updateAccelerationVelocity(particle.y, delta);
-	updateAccelerationVelocity(particle.z, delta);
-}
-
 void updateAccelerationVelocity(std::vector<particle3D> &v, double delta) {
-	for (particle3D &p : v)
-		updateAccelerationVelocity(p, delta);
-}
-
-
-void updateAcceleration(particle3D &particle) {
-	updateAcceleration(particle.x);
-	updateAcceleration(particle.y);
-	updateAcceleration(particle.z);
+	for (particle3D &p : v) {
+        updateAccelerationVelocity(p.x, delta);
+        updateAccelerationVelocity(p.y, delta);
+        updateAccelerationVelocity(p.z, delta);
+	}
 }
 
 void updateAcceleration(std::vector<particle3D> &v) {
-	for (particle3D &p : v)
-		updateAcceleration(p);
+	for (particle3D &p : v) {
+        updateAcceleration(p.x);
+        updateAcceleration(p.y);
+        updateAcceleration(p.z);
+	}
 }
 
 void parseCommandLineArgs(int argc, char *argv[], std::string &inFilename, std::string &outFilename, int &steps,

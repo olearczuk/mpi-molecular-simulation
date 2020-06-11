@@ -19,14 +19,14 @@ int next(int rank, int p) {
 	return (rank + 1) % p;
 }
 
-void propagateParticles(int rank, int p, int n, std::vector<particle3D> v, double *buf) {
+void propagateParticles(int rank, int p, int n, const std::vector<particle3D>& v, double *buf) {
 	// TODO - maybe it can be done using Isend
 	if (rank == 0) {
 		double sendBuf[particleSize * (1 + n/p)];
 		for (int i = 1; i < p; i++) {
 			int begin = beginIndex(i, p, n), nextBegin = beginIndex(i+1, p, n);
 			particlesToArray(v, begin, nextBegin, sendBuf);
-			MPI_Send(sendBuf, particleSize * particlesNumber(rank, p, n), MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
+			MPI_Send(sendBuf, particleSize * particlesNumber(i, p, n), MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
 		}
 		int begin = beginIndex(rank, p, n), nextBegin = beginIndex(rank+1, p, n);
 		particlesToArray(v, begin, nextBegin, buf);
@@ -57,13 +57,16 @@ std::vector<particle3D> updatePotential(int rank, int p, int n, const std::vecto
 	particlesToArray(v, 0, v.size(), buffers[1]);
 	int prv = previous(rank, p), nxt = next(rank, p);
 	int owners[3] = {prv, rank, nxt};
-	MPI_Request request[4];
-	MPI_Status status[4];
-	MPI_Isend(buffers[1], particleSize * particlesNumber(prv, p, n), MPI_DOUBLE, prv, 0, MPI_COMM_WORLD, &request[0]);
-	MPI_Isend(buffers[1], particleSize * particlesNumber(nxt, p, n), MPI_DOUBLE, nxt, 0, MPI_COMM_WORLD, &request[1]);
-	MPI_Irecv(buffers[0], particleSize * particlesNumber(prv, p, n), MPI_DOUBLE, prv, 0, MPI_COMM_WORLD, &request[2]);
-	MPI_Irecv(buffers[2], particleSize * particlesNumber(nxt, p, n), MPI_DOUBLE, nxt, 0, MPI_COMM_WORLD, &request[3]);
-	MPI_Waitall(4, request, status);
+
+	MPI_Request request[6];
+	MPI_Status status[6];
+	// getting neighbour's particles
+	MPI_Isend(buffers[1], particleSize * particlesNumber(rank, p, n), MPI_DOUBLE, prv, 0, MPI_COMM_WORLD, &request[0]);
+    MPI_Irecv(buffers[2], particleSize * particlesNumber(nxt, p, n), MPI_DOUBLE, nxt, 0, MPI_COMM_WORLD, &request[1]);
+    MPI_Waitall(2, request, status);
+	MPI_Isend(buffers[1], particleSize * particlesNumber(rank, p, n), MPI_DOUBLE, nxt, 0, MPI_COMM_WORLD, &request[0]);
+    MPI_Irecv(buffers[0], particleSize * particlesNumber(prv, p, n), MPI_DOUBLE, prv, 0, MPI_COMM_WORLD, &request[1]);
+	MPI_Waitall(2, request, status);
 	vectors[0] = arrayToParticles(buffers[0], particleSize * particlesNumber(prv, p, n));
 	vectors[2] = arrayToParticles(buffers[2], particleSize * particlesNumber(nxt, p, n));
 	int i = 0;
@@ -72,13 +75,13 @@ std::vector<particle3D> updatePotential(int rank, int p, int n, const std::vecto
 			if (move != 0 || s != p - 3)
 				shiftRight(rank, p, n, i, buffers, owners, vectors);
 			else {
-				updatePotential(vectors[1], vectors[1], vectors[1]);
-				updatePotential(vectors[1], vectors[1], vectors[2]);
-				updatePotential(vectors[0], vectors[0], vectors[2]);
+				updatePotential(vectors[1], vectors[1], vectors[1], owners[1], owners[1], owners[1]);
+				updatePotential(vectors[1], vectors[1], vectors[2], owners[1], owners[1], owners[2]);
+				updatePotential(vectors[0], vectors[0], vectors[2], owners[0], owners[0], owners[2]);
 			}
 			if (s == p - 3)
-				updatePotential(vectors[0], vectors[1], vectors[1]);
-			updatePotential(vectors[0], vectors[1], vectors[2]);
+				updatePotential(vectors[0], vectors[1], vectors[1], owners[0], owners[1], owners[1]);
+			updatePotential(vectors[0], vectors[1], vectors[2], owners[0], owners[1], owners[2]);
 		}
 		i = (i + 1) % 3;
 	}
@@ -86,42 +89,58 @@ std::vector<particle3D> updatePotential(int rank, int p, int n, const std::vecto
 		i = previous(i, 3);
 		shiftRight(rank, p, n, i, buffers, owners, vectors);
 		if (rank / (p / 3) == 0)
-			updatePotential(vectors[0], vectors[1], vectors[2]);
+			updatePotential(vectors[0], vectors[1], vectors[2], owners[0], owners[1], owners[2]);
 	}
     particlesToArray(vectors[0], 0, vectors[0].size(), buffers[0]);
     particlesToArray(vectors[1], 0, vectors[1].size(), buffers[1]);
     particlesToArray(vectors[1], 0, vectors[1].size(), buffers[2]);
     MPI_Barrier(MPI_COMM_WORLD);
-	std::vector<particle3D> vRes;
-	double auxBuffer[particleSize * (1 + n / p)];
-	for (int j = 0; j < 3; j++) {
-		std::vector<particle3D> vectorAux;
-		if (owners[j] != rank) {
-			MPI_Isend(buffers[j], particleSize * particlesNumber(owners[j], p, n), MPI_DOUBLE, owners[j], 0,
-                      MPI_COMM_WORLD, &request[0]);
-			MPI_Irecv(auxBuffer, particleSize * particlesNumber(rank, p, n), MPI_DOUBLE, MPI_ANY_SOURCE, 0,
-					MPI_COMM_WORLD, &request[1]);
-			MPI_Waitall(2, request, status);
-			vectorAux = arrayToParticles(auxBuffer, particleSize * particlesNumber(rank, p, n));
-		} else
-			vectorAux = arrayToParticles(buffers[j], particleSize * particlesNumber(rank, p, n));
-		if (vRes.empty())
-			vRes = vectorAux;
-		else {
-			for (size_t k = 0; k < v.size(); k++) {
-				vRes[k].x.potential += vectorAux[k].x.potential;
-				vRes[k].y.potential += vectorAux[k].y.potential;
-				vRes[k].z.potential += vectorAux[k].z.potential;
-			}
-		}
-	}
+    double auxBuffers[3][particleSize * (1 + n / p)];
+    MPI_Isend(buffers[0], particleSize * particlesNumber(owners[0], p, n), MPI_DOUBLE, owners[0], 0,
+              MPI_COMM_WORLD, &request[0]);
+    MPI_Irecv(auxBuffers[0], particleSize * particlesNumber(rank, p, n), MPI_DOUBLE, MPI_ANY_SOURCE, 0,
+              MPI_COMM_WORLD, &request[1]);
+    MPI_Isend(buffers[1], particleSize * particlesNumber(owners[1], p, n), MPI_DOUBLE, owners[1], 0,
+              MPI_COMM_WORLD, &request[2]);
+    MPI_Irecv(auxBuffers[1], particleSize * particlesNumber(rank, p, n), MPI_DOUBLE, MPI_ANY_SOURCE, 0,
+              MPI_COMM_WORLD, &request[3]);
+    MPI_Isend(buffers[2], particleSize * particlesNumber(owners[2], p, n), MPI_DOUBLE, owners[2], 0,
+              MPI_COMM_WORLD, &request[4]);
+    MPI_Irecv(auxBuffers[2], particleSize * particlesNumber(rank, p, n), MPI_DOUBLE, MPI_ANY_SOURCE, 0,
+              MPI_COMM_WORLD, &request[5]);
+    MPI_Waitall(6, request, status);
+    // getting all 3 copies of process's particles and summing their potentials
+	std::vector<particle3D> vRes[3];
+	vRes[0] = arrayToParticles(auxBuffers[0], particleSize * particlesNumber(rank, p, n));
+    vRes[1] = arrayToParticles(auxBuffers[1], particleSize * particlesNumber(rank, p, n));
+    vRes[2] = arrayToParticles(auxBuffers[2], particleSize * particlesNumber(rank, p, n));
+    for (size_t k = 0; k < vRes[0].size(); k++) {
+        vRes[0][k].x.potential += vRes[1][k].x.potential + vRes[2][k].x.potential;
+        vRes[0][k].y.potential += vRes[1][k].y.potential + vRes[2][k].y.potential;
+        vRes[0][k].z.potential += vRes[1][k].z.potential+ vRes[2][k].z.potential;
+    }
     MPI_Barrier(MPI_COMM_WORLD);
-	return vRes;
+	return vRes[0];
 }
 
-void resetPotentials(std::vector<particle3D> &v) {
-    for (particle3D &p : v)
-        p.x.potential = p.y.potential = p.z.potential = 0;
+// TODO - can be done using gather
+void aggregateParticles(int rank, int p, int n, std::vector<particle3D> &v, double *buffer) {
+    if (rank == 0) {
+        std::vector<particle3D> vAux;
+        for (particle3D &particle : v)
+            printParticle(particle);
+        for (int i = 1; i < p; i++) {
+            MPI_Status status;
+            int bufferSize = particleSize * particlesNumber(i, p, n);
+            MPI_Recv(buffer, bufferSize, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, &status);
+            vAux = arrayToParticles(buffer, bufferSize);
+            for (particle3D &particle : vAux)
+                printParticle(particle);
+        }
+    } else {
+        particlesToArray(v, 0, v.size(), buffer);
+        MPI_Send(buffer, particleSize * particlesNumber(rank, p, n), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -147,19 +166,22 @@ int main(int argc, char *argv[]) {
 	buffers[2] = new double[particleSize * (1 + n / p)];
 	propagateParticles(rank, p, n, v, buffers[1]);
 	v = arrayToParticles(buffers[1], particleSize * particlesNumber(rank, p, n));
-	MPI_Barrier(MPI_COMM_WORLD);
+
 	v = updatePotential(rank, p, n, v, buffers);
-	updateAcceleration(v);
-//    printf("%d -- ", rank);
-//	printParticle(v[0]);
+    updateAcceleration(v);
 
 	for (; steps > 0; steps--) {
-	    resetPotentials(v);
+	    // resetting potentials
+        for (particle3D &particle : v) {
+            particle.x.potential = particle.y.potential = particle.z.potential = 0;
+        }
 	    updateCoords(v, delta);
 	    v = updatePotential(rank, p, n, v, buffers);
 	    updateAccelerationVelocity(v, delta);
+
+	    if (isVerbose || steps == 1)
+	        aggregateParticles(rank, p, n, v, buffers[0]);
 	}
-	printParticle(v[0]);
 
 	MPI_Finalize();
 	delete [] buffers[0];
