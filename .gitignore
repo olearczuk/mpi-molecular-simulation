@@ -1,6 +1,5 @@
 body3
 *.o
-tests
 .idea
 CMakeLists.txt
 cmake-build-debug

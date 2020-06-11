@@ -38,10 +38,10 @@ double computePotential(particle3D &i, particle3D &j, particle3D &k) {
 	double potential = 1 / pow(Rij * Rik * Rkj, 3) + 3. *
 		(-Rij*Rij + Rik*Rik + Rkj*Rkj) * (Rij*Rij - Rik*Rik + Rkj*Rkj) * (Rij*Rij + Rik*Rik - Rkj*Rkj) /
 		(8. * pow(Rij * Rik * Rkj, 5));
-	return potential;
+	return 2 * potential;
 }
 
-void updatePotential1D(particle1D &i1D, particle3D &i, particle3D &j, particle3D &k) {
+void updatePotential1D(particle1D &i1D, particle3D &i, particle3D &j, particle3D &k, int type) {
 	double h = getH(i1D);
 	i1D.coord += h;
 	double potentialPlus = computePotential(i, j, k);
@@ -49,6 +49,7 @@ void updatePotential1D(particle1D &i1D, particle3D &i, particle3D &j, particle3D
 	double potentialMinus = computePotential(i, j, k);
 	i1D.potential += potentialPlus - potentialMinus;
 	i1D.coord += h;
+//	printf("%d %.0f %.0f %.0f %.15f %.15f\n", type, i.number, j.number, k.number, potentialPlus, potentialMinus);
 }
 
 void updatePotential(std::vector<particle3D> &v1, std::vector<particle3D> &v2, std::vector<particle3D> &v3,
@@ -60,25 +61,26 @@ void updatePotential(std::vector<particle3D> &v1, std::vector<particle3D> &v2, s
 			        (owner1 == owner2 && i.number < j.number && k.number != i.number && k.number != j.number) ||
 			        (owner1 == owner3 && i.number < k.number && j.number != i.number && j.number != k.number) ||
 			        (owner2 == owner3 && j.number < k.number && i.number != j.number && i.number != k.number)) {
-                    updatePotential1D(i.x, i, j, k);
-                    updatePotential1D(i.y, i, j, k);
-                    updatePotential1D(i.z, i, j, k);
+                    updatePotential1D(i.x, i, j, k, 0);
+                    updatePotential1D(i.y, i, j, k, 1);
+                    updatePotential1D(i.z, i, j, k, 2);
 
-                    updatePotential1D(j.x, j, i, k);
-                    updatePotential1D(j.y, j, i, k);
-                    updatePotential1D(j.z, j, i, k);
+                    updatePotential1D(j.x, j, i, k, 0);
+                    updatePotential1D(j.y, j, i, k, 1);
+                    updatePotential1D(j.z, j, i, k, 2);
 
-                    updatePotential1D(k.x, k, j, i);
-                    updatePotential1D(k.y, k, j, i);
-                    updatePotential1D(k.z, k, j, i);
+                    updatePotential1D(k.x, k, j, i, 0);
+                    updatePotential1D(k.y, k, j, i, 1);
+                    updatePotential1D(k.z, k, j, i, 2);
 				}
 		}
 	}
 }
+
 void updateAcceleration(particle1D &particle) {
     double h = getH(particle);
     volatile double hh = particle.coord + h - (particle.coord - h);
-    particle.acc = 2 * -1 / unitMass * particle.potential / hh;
+    particle.acc = -1 / unitMass * particle.potential / hh;
 }
 
 void updateVelocity(particle1D &particle, double oldAcc, double delta) {
@@ -146,20 +148,20 @@ void particlesToArray(std::vector<particle3D> v, int begin, int end, double *arr
 		particle3D p = v[begin];
 		arr[i] = p.number;
 		i++;
-		arr[i] = p.x.coord;
-		arr[i+1] = p.x.v;
-		arr[i+2] = p.x.acc;
-		arr[i+3] = p.x.potential;
+        arr[i] = p.x.potential;
+		arr[i+1] = p.x.coord;
+        arr[i+2] = p.x.acc;
+		arr[i+3] = p.x.v;
 		i += 4;
-		arr[i] = p.y.coord;
-		arr[i+1] = p.y.v;
-		arr[i+2] = p.y.acc;
-        arr[i+3] = p.y.potential;
+        arr[i] = p.y.potential;
+		arr[i+1] = p.y.coord;
+        arr[i+2] = p.y.acc;
+		arr[i+3] = p.y.v;
         i += 4;
-		arr[i] = p.z.coord;
-		arr[i+1] = p.z.v;
-		arr[i+2] = p.z.acc;
-        arr[i+3] = p.z.potential;
+        arr[i] = p.z.potential;
+		arr[i+1] = p.z.coord;
+        arr[i+2] = p.z.acc;
+		arr[i+3] = p.z.v;
         i += 4;
 	}
 }
@@ -171,22 +173,11 @@ std::vector<particle3D> arrayToParticles(const double *arr, int size) {
 		particle3D p{};
 		p.number = arr[i];
 		i++;
-		p.x.coord = arr[i];
-		p.x.v = arr[i+1];
-		p.x.acc = arr[i+2];
-		p.x.potential = arr[i+3];
+		p.x = {.potential = arr[i], .coord = arr[i+1], .acc = arr[i+2], .v = arr[i+3]};
 		i += 4;
-
-		p.y.coord = arr[i];
-		p.y.v = arr[i+1];
-		p.y.acc = arr[i+2];
-        p.y.potential = arr[i+3];
+        p.y = {.potential = arr[i], .coord = arr[i+1], .acc = arr[i+2], .v = arr[i+3]};
         i += 4;
-
-		p.z.coord = arr[i];
-		p.z.v = arr[i+1];
-		p.z.acc = arr[i+2];
-        p.z.potential = arr[i+3];
+        p.z = {.potential = arr[i], .coord = arr[i+1], .acc = arr[i+2], .v = arr[i+3]};
         i += 4;
 		v.emplace_back(p);
 	}
@@ -202,7 +193,7 @@ void printParticle(particle3D p) {
 
 //    printf("%.0f: %.15f %.15f %.15f\n", p.number, p.x.acc, p.y.acc, p.z.acc);
 
-    printf("%.0f: %.15f %.15f %.15f %.15f %.15f %.15f\n", p.number, p.x.coord, p.y.coord, p.z.coord,
+    printf("%.15f %.15f %.15f %.15f %.15f %.15f\n", p.x.coord, p.y.coord, p.z.coord,
             p.x.v, p.y.v, p.z.v);
 
 //    printf("%f: %f %f %f | %.15f %.15f %.15f\n", p.number,
