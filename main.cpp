@@ -109,19 +109,19 @@ std::vector<particle3D> updatePotential(int rank, int p, int n, const std::vecto
 			vRes = vectorAux;
 		else {
 			for (size_t k = 0; k < v.size(); k++) {
-				vRes[k].x.minusPotential += vectorAux[k].x.minusPotential;
-				vRes[k].x.plusPotential += vectorAux[k].x.plusPotential;
-
-				vRes[k].y.minusPotential += vectorAux[k].y.minusPotential;
-				vRes[k].y.plusPotential += vectorAux[k].y.plusPotential;
-
-				vRes[k].z.minusPotential += vectorAux[k].z.minusPotential;
-				vRes[k].z.plusPotential += vectorAux[k].z.plusPotential;
+				vRes[k].x.potential += vectorAux[k].x.potential;
+				vRes[k].y.potential += vectorAux[k].y.potential;
+				vRes[k].z.potential += vectorAux[k].z.potential;
 			}
 		}
 	}
     MPI_Barrier(MPI_COMM_WORLD);
 	return vRes;
+}
+
+void resetPotentials(std::vector<particle3D> &v) {
+    for (particle3D &p : v)
+        p.x.potential = p.y.potential = p.z.potential = 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -148,13 +148,13 @@ int main(int argc, char *argv[]) {
 	propagateParticles(rank, p, n, v, buffers[1]);
 	v = arrayToParticles(buffers[1], particleSize * particlesNumber(rank, p, n));
 	MPI_Barrier(MPI_COMM_WORLD);
-	// TODO - reset potentials
 	v = updatePotential(rank, p, n, v, buffers);
 	updateAcceleration(v);
 //    printf("%d -- ", rank);
 //	printParticle(v[0]);
 
 	for (; steps > 0; steps--) {
+	    resetPotentials(v);
 	    updateCoords(v, delta);
 	    v = updatePotential(rank, p, n, v, buffers);
 	    updateAccelerationVelocity(v, delta);

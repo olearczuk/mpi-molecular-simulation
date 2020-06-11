@@ -6,14 +6,12 @@
 
 const double auxE = 4.69041575982343e-08;
 const double minDistance = 1e-10;
-// TODO 1 + 3 * 4 (after unifying minusPotential and plusPotential)
-const int particleSize = 1 + 3 * 5;
+const int particleSize = 1 + 3 * 4;
 const double unitMass = 1;
 
 
 struct particle1D {
-	// TODO unify plusPotential and minusPotential
-	double plusPotential, minusPotential;
+	double potential;
 	double coord, acc, v;
 };
 

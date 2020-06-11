@@ -48,9 +48,9 @@ double computePotential(particle3D &i, particle3D &j, particle3D &k) {
 void updatePotential1D(particle1D &i1D, particle3D &i, particle3D &j, particle3D &k) {
 	double h = getH(i1D);
 	i1D.coord += h;
-	i1D.plusPotential += computePotential(i, j, k);
+	i1D.potential += computePotential(i, j, k);
 	i1D.coord -= 2 * h;
-	i1D.minusPotential += computePotential(i, j, k);
+	i1D.potential -= computePotential(i, j, k);
 	i1D.coord += h;
 }
 
@@ -86,7 +86,7 @@ void updatePotential(std::vector<particle3D> &v1, std::vector<particle3D> &v2, s
 void updateAcceleration(particle1D &particle) {
     double h = getH(particle);
     volatile double hh = particle.coord + h - (particle.coord - h);
-    particle.acc = -1 / unitMass * (particle.plusPotential - particle.minusPotential) / hh;
+    particle.acc = -1 / unitMass * particle.potential / hh;
 }
 
 void updateVelocity(particle1D &particle, double oldAcc, double delta) {
@@ -139,8 +139,7 @@ void parseCommandLineArgs(int argc, char *argv[], std::string &inFilename, std::
 std::vector<particle3D> readFile(const std::string& fileName) {
 	particle3D p{};
 	p.x.acc = p.y.acc = p.z.acc = 0;
-	p.x.plusPotential = p.y.plusPotential = p.z.plusPotential = 0;
-	p.x.minusPotential = p.y.minusPotential = p.z.minusPotential = 0;
+	p.x.potential = p.y.potential = p.z.potential = 0;
 	std::vector<particle3D> v;
 	std::fstream file;
 	file.open(fileName);
@@ -165,24 +164,18 @@ void particlesToArray(std::vector<particle3D> v, int begin, int end, double *arr
 		arr[i] = p.x.coord;
 		arr[i+1] = p.x.v;
 		arr[i+2] = p.x.acc;
-		// TODO arr[i+3] = p.x.potential; i += 4;
-		arr[i+3] = p.x.minusPotential;
-		arr[i+4] = p.x.plusPotential;
-		i += 5;
+		arr[i+3] = p.x.potential;
+		i += 4;
 		arr[i] = p.y.coord;
 		arr[i+1] = p.y.v;
 		arr[i+2] = p.y.acc;
-		// TODO arr[i+3] = p.y.potential; i += 4;
-		arr[i+3] = p.y.minusPotential;
-		arr[i+4] = p.y.plusPotential;
-		i += 5;
+        arr[i+3] = p.y.potential;
+        i += 4;
 		arr[i] = p.z.coord;
 		arr[i+1] = p.z.v;
 		arr[i+2] = p.z.acc;
-		// TODO arr[i+3] = p.z.potential; i += 4;
-		arr[i+3] = p.z.minusPotential;
-		arr[i+4] = p.z.plusPotential;
-		i += 5;
+        arr[i+3] = p.z.potential;
+        i += 4;
 	}
 }
 
@@ -196,26 +189,20 @@ std::vector<particle3D> arrayToParticles(const double *arr, int size) {
 		p.x.coord = arr[i];
 		p.x.v = arr[i+1];
 		p.x.acc = arr[i+2];
-		// TODO p.x.potential = arr[i+3]; i += 4;
-		p.x.minusPotential = arr[i+3];
-		p.x.plusPotential = arr[i+4];
-		i += 5;
+		p.x.potential = arr[i+3];
+		i += 4;
 
 		p.y.coord = arr[i];
 		p.y.v = arr[i+1];
 		p.y.acc = arr[i+2];
-		// TODO p.y.potential = arr[i+3]; i += 4;
-		p.y.minusPotential = arr[i+3];
-		p.y.plusPotential = arr[i+4];
-		i += 5;
+        p.y.potential = arr[i+3];
+        i += 4;
 
 		p.z.coord = arr[i];
 		p.z.v = arr[i+1];
 		p.z.acc = arr[i+2];
-		// TODO p.z.potential = arr[i+3]; i += 4;
-		p.z.minusPotential = arr[i+3];
-		p.z.plusPotential = arr[i+4];
-		i += 5;
+        p.z.potential = arr[i+3];
+        i += 4;
 		v.emplace_back(p);
 	}
 	return v;
@@ -233,8 +220,7 @@ void printParticle(particle3D p) {
     printf("%.0f: %.15f %.15f %.15f %.15f %.15f %.15f\n", p.number, p.x.coord, p.y.coord, p.z.coord,
             p.x.v, p.y.v, p.z.v);
 
-//    printf("%f: %f %f %f | %.15f %.15f %.15f | %.15f %.15f %.15f\n", p.number,
+//    printf("%f: %f %f %f | %.15f %.15f %.15f\n", p.number,
 //           p.x.coord, p.y.coord, p.z.coord,
-//           p.x.minusPotential, p.y.minusPotential, p.z.minusPotential,
-//           p.x.plusPotential, p.y.plusPotential, p.z.plusPotential);
+//           p.x.potential, p.y.potential, p.z.potential);
 }
