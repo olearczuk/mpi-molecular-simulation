@@ -20,7 +20,7 @@ int next(int rank, int p) {
 }
 
 void propagateParticles(int rank, int p, int n, const std::vector<particle3D>& v, double *buf) {
-	// TODO - maybe it can be done using Isend
+	// TODO - it should be done using MPI_Scatterv
 	if (rank == 0) {
 		double sendBuf[particleSize * (1 + n/p)];
 		for (int i = 1; i < p; i++) {
@@ -100,17 +100,7 @@ std::vector<particle3D> updatePotential(int rank, int p, int n, const std::vecto
     particlesToArray(vectors[2], 0, vectors[2].size(), buffers[2]);
     MPI_Barrier(MPI_COMM_WORLD);
 
-//    if (owners[0] == 0) {
-//        printf("--- %d %.15f %.15f %.15f\n", rank, vectors[0][0].x.potential, vectors[0][0].y.potential, vectors[0][0].z.potential);
-//    }
-//    if (owners[1] == 0) {
-//        printf("--- %d %.15f %.15f %.15f\n", rank, vectors[1][0].x.potential, vectors[1][0].y.potential, vectors[1][0].z.potential);
-//    }
-//    if (owners[2] == 0) {
-//        printf("--- %d %.15f %.15f %.15f\n", rank, vectors[2][0].x.potential, vectors[2][0].y.potential, vectors[2][0].z.potential);
-//    }
-
-
+    // sending stored particles to its owners
     double auxBuffers[3][particleSize * (1 + n / p)];
     MPI_Isend(buffers[0], particleSize * particlesNumber(owners[0], p, n), MPI_DOUBLE, owners[0],
             0, MPI_COMM_WORLD, &request[0]);
@@ -125,28 +115,21 @@ std::vector<particle3D> updatePotential(int rank, int p, int n, const std::vecto
     MPI_Irecv(auxBuffers[2], particleSize * particlesNumber(rank, p, n), MPI_DOUBLE, MPI_ANY_SOURCE, 0,
               MPI_COMM_WORLD, &request[5]);
     MPI_Waitall(6, request, status);
-    // getting all 3 copies of process's particles and summing their potentials
+    // summing potentials of all 3 copies of process's particles
 	std::vector<particle3D> vRes[3];
 	vRes[0] = arrayToParticles(auxBuffers[0], particleSize * particlesNumber(rank, p, n));
     vRes[1] = arrayToParticles(auxBuffers[1], particleSize * particlesNumber(rank, p, n));
     vRes[2] = arrayToParticles(auxBuffers[2], particleSize * particlesNumber(rank, p, n));
-//    if (rank == 0) {
-//        printf("### %.15f %.15f %.15f\n", vRes[0][0].x.potential, vRes[0][0].y.potential, vRes[0][0].z.potential);
-//        printf("### %.15f %.15f %.15f\n", vRes[1][0].x.potential, vRes[1][0].y.potential, vRes[1][0].z.potential);
-//        printf("### %.15f %.15f %.15f\n", vRes[2][0].x.potential, vRes[2][0].y.potential, vRes[2][0].z.potential);
-//
-//    }
     for (size_t k = 0; k < vRes[0].size(); k++) {
         vRes[0][k].x.potential += vRes[1][k].x.potential + vRes[2][k].x.potential;
         vRes[0][k].y.potential += vRes[1][k].y.potential + vRes[2][k].y.potential;
         vRes[0][k].z.potential += vRes[1][k].z.potential + vRes[2][k].z.potential;
     }
-//    printf("%d %.15f %.15f %.15f\n", rank, vRes[0][0].x.potential, vRes[0][0].y.potential, vRes[0][0].z.potential);
     MPI_Barrier(MPI_COMM_WORLD);
 	return vRes[0];
 }
 
-// TODO - can be done using gather
+// TODO - can be done using MPI_Gatherv
 void aggregateParticles(int rank, int p, int n, std::vector<particle3D> &v, double *buffer) {
     if (rank == 0) {
         std::vector<particle3D> vAux;
@@ -192,9 +175,6 @@ int main(int argc, char *argv[]) {
 
 	v = updatePotential(rank, p, n, v, buffers);
     updateAcceleration(v);
-//    printParticle(v[0]);
-//    MPI_Finalize();
-//    return 0;
 	for (; steps > 0; steps--) {
 	    // resetting potentials
         for (particle3D &particle : v) {
@@ -203,11 +183,9 @@ int main(int argc, char *argv[]) {
 	    updateCoords(v, delta);
 	    v = updatePotential(rank, p, n, v, buffers);
 	    updateAccelerationVelocity(v, delta);
-
 	    if (isVerbose || steps == 1)
 	        aggregateParticles(rank, p, n, v, buffers[0]);
 	}
-
 	MPI_Finalize();
 	delete [] buffers[0];
 	delete [] buffers[1];

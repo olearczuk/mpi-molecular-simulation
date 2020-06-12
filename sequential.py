@@ -2,7 +2,7 @@ import argparse
 import math
 
 eps = 4.69041575982343e-08
-min_abs = 10e-10
+min_abs = 1e-10
 # m = 1.66053892173e-27
 m = 1
 

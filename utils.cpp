@@ -19,7 +19,6 @@ void updateCoords(std::vector<particle3D> &v, double delta) {
 }
 
 double getH(particle1D &particle) {
-	// TODO - should be here abs(particle.coord) or not (shouldn't make a difference here)
     if (std::abs(particle.coord) >= minDistance)
         return particle.coord * auxE;
     else
@@ -41,15 +40,14 @@ double computePotential(particle3D &i, particle3D &j, particle3D &k) {
 	return 2 * potential;
 }
 
-void updatePotential1D(particle1D &i1D, particle3D &i, particle3D &j, particle3D &k, int type) {
-	double h = getH(i1D);
-	i1D.coord += h;
-	double potentialPlus = computePotential(i, j, k);
-	i1D.coord -= 2 * h;
-	double potentialMinus = computePotential(i, j, k);
-	i1D.potential += potentialPlus - potentialMinus;
-	i1D.coord += h;
-//	printf("%d %.0f %.0f %.0f %.15f %.15f\n", type, i.number, j.number, k.number, potentialPlus, potentialMinus);
+void updatePotential1D(particle1D &i1D, particle3D &i, particle3D &j, particle3D &k) {
+    double h = getH(i1D), oldCoord = i1D.coord;
+    i1D.coord = oldCoord + h;
+    double potentialPlus = computePotential(i, j, k);
+    i1D.coord = oldCoord - h;
+    double potentialMinus = computePotential(i, j, k);
+    i1D.potential += potentialPlus - potentialMinus;
+    i1D.coord = oldCoord;
 }
 
 void updatePotential(std::vector<particle3D> &v1, std::vector<particle3D> &v2, std::vector<particle3D> &v3,
@@ -58,20 +56,21 @@ void updatePotential(std::vector<particle3D> &v1, std::vector<particle3D> &v2, s
 		for (auto & j : v2) {
 			for (auto & k : v3)
 			    if ((owner1 != owner2 && owner1 != owner3 && owner2 != owner3) ||
-			        (owner1 == owner2 && i.number < j.number && k.number != i.number && k.number != j.number) ||
-			        (owner1 == owner3 && i.number < k.number && j.number != i.number && j.number != k.number) ||
-			        (owner2 == owner3 && j.number < k.number && i.number != j.number && i.number != k.number)) {
-                    updatePotential1D(i.x, i, j, k, 0);
-                    updatePotential1D(i.y, i, j, k, 1);
-                    updatePotential1D(i.z, i, j, k, 2);
+			        (owner1 == owner2 && owner3 != owner1 && i.number < j.number && k.number != i.number && k.number != j.number) ||
+			        (owner1 == owner3 && owner2 != owner1 && i.number < k.number && j.number != i.number && j.number != k.number) ||
+			        (owner2 == owner3 && owner1 != owner2 && j.number < k.number && i.number != j.number && i.number != k.number) ||
+			        (owner1 == owner2 && owner1 == owner3 && i.number < j.number && j.number < k.number)) {
+                    updatePotential1D(i.x, i, j, k);
+                    updatePotential1D(i.y, i, j, k);
+                    updatePotential1D(i.z, i, j, k);
 
-                    updatePotential1D(j.x, j, i, k, 0);
-                    updatePotential1D(j.y, j, i, k, 1);
-                    updatePotential1D(j.z, j, i, k, 2);
+                    updatePotential1D(j.x, j, i, k);
+                    updatePotential1D(j.y, j, i, k);
+                    updatePotential1D(j.z, j, i, k);
 
-                    updatePotential1D(k.x, k, j, i, 0);
-                    updatePotential1D(k.y, k, j, i, 1);
-                    updatePotential1D(k.z, k, j, i, 2);
+                    updatePotential1D(k.x, k, j, i);
+                    updatePotential1D(k.y, k, j, i);
+                    updatePotential1D(k.z, k, j, i);
 				}
 		}
 	}
@@ -122,7 +121,6 @@ void parseCommandLineArgs(int argc, char *argv[], std::string &inFilename, std::
     isVerbose = argc == 6 && strcmp(argv[5], "-v") == 0;
 }
 
-// TODO maybe propagate particles in chunks here
 std::vector<particle3D> readFile(const std::string& fileName) {
 	particle3D p{};
 	p.x.acc = p.y.acc = p.z.acc = 0;
@@ -135,10 +133,10 @@ std::vector<particle3D> readFile(const std::string& fileName) {
 	while(std::getline(file, s)) {
 		std::istringstream stream(s);
 		stream >> p.x.coord >> p.y.coord >> p.z.coord >> p.x.v >> p.y.v >> p.z.v;
-		p.number = number;
-		number++;
+		p.number = number++;
 		v.emplace_back(p);
 	}
+	file.close();
 	return v;
 }
 
