@@ -1,6 +1,6 @@
 body3
 *.o
 .idea
-CMakeLists.txt
+build
 cmake-build-debug
 print_triples.py

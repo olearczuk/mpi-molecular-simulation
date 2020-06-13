@@ -1,7 +1,6 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
-#include <fstream>
 #include <sstream>
 #include <cstdio>
 #include "utils.h"
@@ -34,10 +33,9 @@ double computeNorm(particle3D &particle1, particle3D &particle2) {
 
 double computePotential(particle3D &i, particle3D &j, particle3D &k) {
 	double Rij = computeNorm(i, j), Rik = computeNorm(i, k), Rkj = computeNorm(k, j);
-	double potential = 1 / pow(Rij * Rik * Rkj, 3) + 3. *
+	return 1 / pow(Rij * Rik * Rkj, 3) + 3. *
 		(-Rij*Rij + Rik*Rik + Rkj*Rkj) * (Rij*Rij - Rik*Rik + Rkj*Rkj) * (Rij*Rij + Rik*Rik - Rkj*Rkj) /
 		(8. * pow(Rij * Rik * Rkj, 5));
-	return 2 * potential;
 }
 
 void updatePotential1D(particle1D &i1D, particle3D &i, particle3D &j, particle3D &k) {
@@ -46,7 +44,7 @@ void updatePotential1D(particle1D &i1D, particle3D &i, particle3D &j, particle3D
     double potentialPlus = computePotential(i, j, k);
     i1D.coord = oldCoord - h;
     double potentialMinus = computePotential(i, j, k);
-    i1D.potential += potentialPlus - potentialMinus;
+    i1D.potential += 2 * (potentialPlus - potentialMinus);
     i1D.coord = oldCoord;
 }
 
@@ -140,10 +138,9 @@ std::vector<particle3D> readFile(const std::string& fileName) {
 	return v;
 }
 
-void particlesToArray(std::vector<particle3D> v, int begin, int end, double *arr) {
+void particlesToArray(const std::vector<particle3D>& v, double *arr) {
 	int i = 0;
-	for (; begin < end; begin++) {
-		particle3D p = v[begin];
+	for (particle3D p : v) {
 		arr[i] = p.number;
 		i++;
         arr[i] = p.x.potential;
@@ -182,19 +179,8 @@ std::vector<particle3D> arrayToParticles(const double *arr, int size) {
 	return v;
 }
 
-// TODO remove
-void printParticle(particle3D p) {
-//    printf("%f: %f %f %f %f %f | %f %f %f %f %f | %f %f %f %f %f\n", p.number,
-//            p.x.coord, p.x.v, p.x.acc, p.x.minusPotential, p.x.plusPotential,
-//           p.y.coord, p.y.v, p.x.acc, p.y.minusPotential, p.y.plusPotential,
-//           p.z.coord, p.z.v, p.z.acc, p.z.minusPotential, p.z.plusPotential);
+void printParticles(std::vector<particle3D>& v, std::ofstream& file) {
+    for (particle3D &p : v)
+        file << p.x.coord << " " << p.y.coord << " " << p.z.coord << " " << p.x.v << " " << p.y.v << " " << p.z.v << "\n";
 
-//    printf("%.0f: %.15f %.15f %.15f\n", p.number, p.x.acc, p.y.acc, p.z.acc);
-
-    printf("%.15f %.15f %.15f %.15f %.15f %.15f\n", p.x.coord, p.y.coord, p.z.coord,
-            p.x.v, p.y.v, p.z.v);
-
-//    printf("%f: %f %f %f | %.15f %.15f %.15f\n", p.number,
-//           p.x.coord, p.y.coord, p.z.coord,
-//           p.x.potential, p.y.potential, p.z.potential);
 }

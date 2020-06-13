@@ -2,6 +2,7 @@
 #define UTILS_H
 
 #include <string>
+#include <fstream>
 #include <vector>
 
 const double auxE = 4.69041575982343e-08;
@@ -31,10 +32,9 @@ void updatePotential(std::vector<particle3D> &v1, std::vector<particle3D> &v2, s
 void updateAccelerationVelocity(std::vector<particle3D> &v, double delta);
 void updateAcceleration(std::vector<particle3D> &v);
 
-void particlesToArray(std::vector<particle3D> v, int begin, int end, double *arr);
+void particlesToArray(const std::vector<particle3D>& v, double *arr);
 std::vector<particle3D> arrayToParticles(const double *arr, int size);
 
-//TODO remove
-void printParticle(particle3D p);
+void printParticles(std::vector<particle3D>& v, std::ofstream& file);
 
 #endif //UTILS_H
