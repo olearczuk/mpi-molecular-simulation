@@ -166,7 +166,6 @@ int main(int argc, char *argv[]) {
 	if (rank == 0) {
 		v = readFile(inFilename);
 		n = v.size();
-	    outFilename = outFilename + "_" + std::to_string(steps) + ".txt";
 	}
 	MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	double *buffers[3];
@@ -178,7 +177,7 @@ int main(int argc, char *argv[]) {
 
 	v = updatePotential(rank, p, n, v, buffers);
     updateAcceleration(v);
-	for (; steps > 0; steps--) {
+	for (int i = 1; i <= steps; i++) {
 	    // resetting potentials
         for (particle3D &particle : v) {
             particle.x.potential = particle.y.potential = particle.z.potential = 0;
@@ -186,8 +185,10 @@ int main(int argc, char *argv[]) {
 	    updateCoords(v, delta);
 	    v = updatePotential(rank, p, n, v, buffers);
 	    updateAccelerationVelocity(v, delta);
-	    if (isVerbose || steps == 1)
-	        aggregateParticles(rank, p, n, v, buffers[0], outFilename);
+	    if (isVerbose || i == steps) {
+            std::string auxFilename = outFilename + "_" + std::to_string(i) + ".txt";
+            aggregateParticles(rank, p, n, v, buffers[0], auxFilename);
+        }
 	}
 	MPI_Finalize();
 	delete [] buffers[0];
